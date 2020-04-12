@@ -5,25 +5,37 @@ const {
     check,
     validationResult
 } = require('express-validator');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const auth = require('../../middleware/authentication');
 
 const User = require('../../models/User');
-const SECRET = config.get('secret');
 
 /**
- * @route POST api/users
- * @desc Register a new user
- * @access Public
+ * @route   GET /api/auth
+ * @desc    User authentication. Uses custom login middleware
+ *          reqired in ../../middleware/authentication
+ * @access  Public
+ */
+router.get('/', auth, async (req, res) => {
+    try {
+        let user = await User.findById(req.user.id).select('-password');
+        res.json(user);
+    } catch (e) {
+        console.error(e.message);
+        res.send(e);
+    }
+});
+
+/**
+ * @route   POST /api/auth
+ * @desc    Authenticate and retrieve json web tokenon
+ * @access  Public
  */
 router.post(
     '/',
     [
         check('username', 'Username is required').not().isEmpty(),
-        check('password', 'Password is required to be 8 symbols').isLength({
-            min: 8
-        }),
-        check('email', 'Incorrect email format').isEmail()
+        check('password', 'Password is required').not().isEmpty()
     ],
     async (req, res) => {
         const errors = validationResult(req);
@@ -33,33 +45,22 @@ router.post(
             });
         }
 
-        let {
+        const {
             username,
-            password,
-            email
+            password
         } = req.body;
 
         try {
             let user = await User.findOne({
                 username
             });
-            if (user) {
-                return res.status(400).json({
-                    msg: 'User already exists'
-                });
+            if (!user) {
+                return res.status(401).json({
+                    errors: [{
+                        msg: 'Invalid credentials'
+                    }]
+                })
             }
-
-            // Encrypt password
-            const salt = await bcrypt.genSalt(10);
-            password = await bcrypt.hash(password, salt);
-
-            user = new User({
-                username,
-                password,
-                email
-            });
-
-            await user.save(); // new user created and saved into database
 
             const payload = {
                 user: {
@@ -67,11 +68,13 @@ router.post(
                 }
             };
 
-            jwt.sign(payload, SECRET, {
+            jwt.sign(payload, config.get('secret'), {
                 expiresIn: 3600
             }, (err, token) => {
-                if (err) throw err;
-                res.json({ // if no errors, json web token is returned
+                if (err) {
+                    throw err;
+                }
+                res.json({
                     token
                 });
             });
