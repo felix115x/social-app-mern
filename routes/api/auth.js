@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const auth = require('../../middleware/authentication');
 
 const User = require('../../models/User');
+const SECRET = config.get('secret');
 
 /**
  * @route   GET /api/auth
@@ -68,7 +69,7 @@ router.post(
                 }
             };
 
-            jwt.sign(payload, config.get('secret'), {
+            jwt.sign(payload, SECRET, {
                 expiresIn: 3600
             }, (err, token) => {
                 if (err) {
