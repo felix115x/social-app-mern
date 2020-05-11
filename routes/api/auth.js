@@ -6,6 +6,7 @@ const {
     validationResult
 } = require('express-validator');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const auth = require('../../middleware/authentication');
 
 const User = require('../../models/User');
@@ -17,7 +18,7 @@ const SECRET = config.get('secret');
  *          reqired in ../../middleware/authentication
  * @access  Public
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, async(req, res) => {
     try {
         let user = await User.findById(req.user.id).select('-password');
         res.json(user);
@@ -33,16 +34,16 @@ router.get('/', auth, async (req, res) => {
  * @access  Public
  */
 router.post(
-    '/',
-    [
-        check('username', 'Username is required').not().isEmpty(),
-        check('password', 'Password is required').not().isEmpty()
+    '/', [
+        check('username', 'Username is required').exists(),
+        check('password', 'Password is required').exists()
     ],
-    async (req, res) => {
+    async(req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({
-                errors: errors.array()
+                errors: errors.array(),
+                req: req.body
             });
         }
 
@@ -56,11 +57,22 @@ router.post(
                 username
             });
             if (!user) {
-                return res.status(401).json({
-                    errors: [{
-                        msg: 'Invalid credentials'
-                    }]
-                })
+                return res
+                    .status(401)
+                    .json({
+                        errors: [{
+                            msg: 'Invalid credentials'
+                        }]
+                    })
+            }
+
+            const passwordMatch = await bcrypt.compare(password, user.password);
+            if (!passwordMatch) {
+                return res
+                    .status(401)
+                    .json({
+                        errors: [{ msg: 'Invalid credentials' }]
+                    });
             }
 
             const payload = {
